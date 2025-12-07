@@ -44,6 +44,15 @@ class CarSprite(pygame.sprite.Sprite):
         distance_checkpoint = (self.rect.center - np.array(rect_checkpoint)) / np.array([WINDOW_WIDTH, WINDOW_HEIGHT])
         return distance_checkpoint
     
+    def calc_direction_to_object(self, rect_checkpoint):
+        # Calculate the difference in x and y coordinates
+        dx = rect_checkpoint[0] - self.rect.centerx
+        dy = rect_checkpoint[1] - self.rect.centery       
+        # Calculate the angle using atan2
+        angle_radians = math.atan2(dy, dx)
+        # to [0,1] via sin and cos
+        return np.array([np.cos(angle_radians), np.sin(angle_radians)])
+    
 class PadSprite(pygame.sprite.Sprite):
     def __init__(self, position, width, height=25):
         super(PadSprite, self).__init__()

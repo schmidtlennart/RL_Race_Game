@@ -14,8 +14,8 @@ LOAD = "load" in sys.argv
 SAVE = "save" in sys.argv
 FOLDER_NAME = "deepq_nn"
 
-START_SHOWING_FROM = 150 #400
-SHOW_EVERY = 1
+START_SHOWING_FROM = 10 #400
+SHOW_EVERY = 5
 
 ### Training settings
 LEARNING_RATE = 0.5
@@ -24,7 +24,7 @@ EPISODES = 2000#000 #10000
 START_RANDOM_STARTING_FROM = 0#200#1500
 
 ### Exploration settings
-epsilon = 0.4 # not a constant, qoing to be decayed
+epsilon = 0.4    # not a constant, qoing to be decayed
 EPSILON_MIN = 0 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
 START_EPSILON_DECAYING = 0#1000
 END_EPSILON_DECAYING = 400
@@ -35,8 +35,6 @@ EPSILON_PULSE_AT = 700
 
 
 ### STATES & ACTIONS: create bins of continous states for the Q-table
-all_bins = calc_bins()
-
 # action space
 # Game controls: 0: no action (e.g. keep going straight), 1: forward, 2: backward/brake, 3: left, 4: right
 # For qlearning, we drop no action [0,0] to prevent the agent from getting stuck. has to either move or turn
@@ -49,25 +47,23 @@ logging_cols = ["Steps", "Epsilon", "Cumulative Q", "Cumulative Reward", "Cumula
     
 
 ### INITIALIZE AGENT
-
+q_agent = DeepQLearner(state_size=19, action_size=len(actions), seed=36, 
+                        buffer_size=10000, batch_size=64, discount=DISCOUNT, lr=0.001, tau=0.001, update_every=4)
 if LOAD:
+    # update weights from file
     print("LOADING Q-MODELS")
-    q_agent = DeepQLearner(state_size=10, action_size=len(actions), seed=36, 
-                           buffer_size=10000, batch_size=64, discount=DISCOUNT, lr=0.001, tau=0.001, update_every=4)
     q_agent.qnetwork_local.load_state_dict(torch.load(f"results/{FOLDER_NAME}/qnetwork_local.pth"))
     q_agent.qnetwork_local.eval()
     q_agent.qnetwork_target.load_state_dict(torch.load(f"results/{FOLDER_NAME}/qnetwork_target.pth"))
     q_agent.qnetwork_target.eval()
     logging_list = pd.read_feather(f"results/{FOLDER_NAME}/logging.feather").values.tolist()
 else:
-    q_agent = DeepQLearner(state_size=10, action_size=len(actions), seed=36, 
-                           buffer_size=10000, batch_size=64, discount=DISCOUNT, lr=0.001, tau=0.001, update_every=4)
    # logging
     logging_list = []
 
 ### QLEARNING LOOP
 # initialize environment
-environment = RaceEnv(mode="deeqpq_nn")
+environment = RaceEnv(mode="deepq_nn")
 environment.init_render()
 render = False
 random_start = False # Only start at random position after n episodes
@@ -98,7 +94,7 @@ for episode in range(EPISODES):
         # penalize win reward for n steps if too long
         if environment.win_condition:
             #clip so that a reward is untouched if >1000 steps but there is always a significant remaining reward
-            penalizer = np.clip((steps/1000)-1, 0, 10)
+            penalizer = np.clip((steps/2000)-1, 0, 6)
             reward -= MAX_REWARD/penalizer
         # render current state
         if render:

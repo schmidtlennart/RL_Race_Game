@@ -36,7 +36,7 @@ class RaceEnv(gym.Env):
         self.checkpoints = [CheckpointSprite(checkpoint) for checkpoint in checkpoints_list]
         self.checkpoint_group = pygame.sprite.Group(self.checkpoints)
         self.checkpoint_counter = 0
-
+        self.current_checkpoint_reward = 0
         # create trophy
         self.trophy = Trophy((298,20))
         self.trophy_group = pygame.sprite.Group(self.trophy)#only needed for collision calculation
@@ -91,10 +91,13 @@ class RaceEnv(gym.Env):
         # return obsrevations etc. for training
         # for speed, round because floats caused problems in discretization
         if self.mode == "deepq_nn":
+            distances_out = np.array(self.distances)/(MAX_VIEW) #normalize by maximum view to be between 0 and 1
             direction_out = degree_to_sin_cos(self.car.direction)
-            dist_to_trophy = np.array(self.car.rect.center) - np.array(self.trophy.rect.center)
+            direction_to_checkpoint = self.car.calc_direction_to_object(self.checkpoints[self.checkpoint_counter].rect.center)
+            direction_to_trophy = self.car.calc_direction_to_object(self.trophy.rect.center)
+            dist_to_trophy = (np.array(self.car.rect.center) - np.array(self.trophy.rect.center))/np.array([WINDOW_WIDTH, WINDOW_HEIGHT])
             # more state features: whisker distances, direction, speed, distance to trophy, distance to next checkpoint
-            state = np.concatenate([self.distances, direction_out, np.round(self.car.speed), dist_to_trophy, self.distance_checkpoint])        
+            state = np.concatenate([distances_out, direction_out, np.array([np.round(self.car.speed)]), dist_to_trophy, direction_to_trophy, self.distance_checkpoint, direction_to_checkpoint])        
         elif self.mode == "qtable":
             state = np.concatenate([self.distances, np.array([self.car.direction, np.round(self.car.speed)])])
         return state       
@@ -142,7 +145,7 @@ class RaceEnv(gym.Env):
         self.reward_dict["Wall/Pad Buffer"] = sum(buffer_penalties)
 
         ### 3. DISTANCE to both pads and walls
-        # distance_penalty = 1-np.array(self.distances)/(VIEW*1.1) #normalize by maximum view distance to [0,1]
+        # distance_penalty = 1-np.array(self.distances)/(MAX_VIEW) #normalize by maximum view distance to [0,1]
         # distance_penalty = np.sum(distance_penalty)*DISTANCE_PENALTY #alternatively: max = only respect closest object
         # reward_list.append(distance_penalty)
  
@@ -157,35 +160,35 @@ class RaceEnv(gym.Env):
         self.checkpoint_reached = False
         # 1. if the next checkpoint is reached, update counter, add reward
         if self.checkpoints[self.checkpoint_counter].rect.collidepoint(self.car.rect.center):
-            cp_reward = CHECKPOINT_REWARD#needs to be 1-indexed
+            self.current_checkpoint_reward = CHECKPOINT_REWARD*(self.checkpoint_counter+1)#needs to be 1-indexed
             # remove checkpoint from to make sure each checkpoint is only counted once
             #self.checkpoints[self.checkpoint_counter].rect.center = (-100,-100)
             if (self.checkpoint_counter < len(self.checkpoints)-1):#as long as not in final zone, next checkpoint has to be reached
                     self.checkpoint_counter += 1
             # set reward to checkpoint reward, return and overwrite Q directly
-            self.reward = cp_reward
-            self.reward_dict["Checkpoint Level"] = cp_reward
+            self.reward = self.current_checkpoint_reward
+            self.reward_dict["Checkpoint Level"] = self.current_checkpoint_reward
             self.checkpoint_reached = True
             self.screenmessage = f"Checkpoint reached! Reward: {round(self.reward,1)}"
             return
         # 2. However, if below previous checkpoint again (positive y distance), decrease give penalty and decrease counter again
         distance_to_prev_cp = self.car.rect.centery-self.checkpoints[self.checkpoint_counter-1].rect.bottom #calculation a bit different here than below
         if self.checkpoint_counter > 0 and distance_to_prev_cp > 10:#if below previous checkpoint by n pixels
-            cp_reward = -CHECKPOINT_REWARD
+            self.current_checkpoint_reward = -CHECKPOINT_REWARD*(self.checkpoint_counter+1)
             self.checkpoint_counter -= 1
-            self.reward = cp_reward
-            self.reward_dict["Checkpoint Level"] = cp_reward
+            self.reward = self.current_checkpoint_reward
+            self.reward_dict["Checkpoint Level"] = self.current_checkpoint_reward
             self.screenmessage = f"Penalty: Below previous Checkpoint! Reward: {round(self.reward,1)}"
             return
 
         # 3. if not reached simply continue adding constant for having made above checkpoint n    
-        #self.reward_dict["Checkpoint Level"] = self.checkpoint_reward
+        self.reward_dict["Checkpoint Level"] = self.current_checkpoint_reward
         
         ### 5. DISTANCE TO NEXT CHECKPOINT 
-        # self.distance_checkpoint = self.car.calc_distance_to_checkpoint(self.checkpoints[self.checkpoint_counter].rect.center)       
+        self.distance_checkpoint = self.car.calc_distance_to_checkpoint(self.checkpoints[self.checkpoint_counter].rect.center)       
         # # subtract from 1
-        # dist_cp_reward = (1-np.sum(np.abs(self.distance_checkpoint)))*DISTANCE_CHECKPOINT_REWARD
-        # self.reward_dict["Distance to Checkpoint"] = dist_cp_reward
+        dist_cp = (1-np.sum(np.abs(self.distance_checkpoint)))*DISTANCE_CHECKPOINT_REWARD
+        self.reward_dict["Distance to Checkpoint"] = dist_cp
         
         ### sum up all penalties
         self.reward = np.nansum(list(self.reward_dict.copy().values()))
@@ -262,7 +265,7 @@ class RaceEnv(gym.Env):
                 w_argmin = w_distances_pads.argmin()#get closest collision
                 w_collisions.append(w_collisions_w[w_argmin])            
             else: # no collision between whisker and pad/wall
-                w_distances_pads = np.array([view*1.1]) # set to beyond max view
+                w_distances_pads = np.array([MAX_VIEW]) # set to beyond max view
             w_distances.append(w_distances_pads.min())
         self.whisker_collisions = w_collisions
         self.distances = w_distances

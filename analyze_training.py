@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import sys
 
-outfolder = sys.argv[1]
+outfolder = sys.argv[1] #qtable or deepq_nn
 
-outpath = f"images/{outfolder}/logging.png"
+outpath = f"images/{outfolder}/logging.png" 
 
 logging_df = pd.read_feather(f"results/{outfolder}/logging.feather")
 logging_df["Episode"] = logging_df.index.astype(int)

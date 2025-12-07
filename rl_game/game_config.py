@@ -21,4 +21,5 @@ MAX_SPEED = 8
 MIN_SPEED = -3
 ACCELERATION = 4
 TURN_ACCELERATION = 10 #in degrees
-VIEW = 80 #viewing distance of driver in 8 whisker directions
+VIEW = 80 # viewing distance of driver in 8 whisker directions
+MAX_VIEW = 1.1*VIEW # value if nothing in view
